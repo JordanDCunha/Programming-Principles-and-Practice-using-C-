@@ -1,0 +1,64 @@
+/**
+ * SECTION 6.7: RECOVERING FROM ERRORS
+ * --- THEORY PART ---
+ * [1] GRACEFUL DEGRADATION: A program shouldn't quit just because of a typo. 
+ * We want it to report the error and reset its state for the next input.
+ * [2] THE "IGNORE" PATTERN: To recover, we must flush the "bad" input out 
+ * of the buffer. We do this by searching for our 'print' character (';').
+ * [3] ROBUST RECOVERY: ignore() must be "exception-safe." It shouldn't 
+ * use the parser (get()) because the parser might throw another error 
+ * while we are already trying to fix the first one.
+ * [4] BUFFER AWARENESS: ignore() must check both the Token_stream 
+ * buffer AND the raw cin stream to be thorough.
+ */
+
+#include "PPP.h"
+
+// --- Updated Token_stream ---
+class Token_stream {
+public:
+    Token get();
+    void putback(Token t);
+    void ignore(char c); // DISCARD CHARACTERS UP TO 'c'
+private:
+    bool full{false};
+    Token buffer{0};
+};
+
+void Token_stream::ignore(char c) {
+    // 1. Check the buffer first
+    if (full && c == buffer.kind) {
+        full = false;
+        return;
+    }
+    full = false; // discard buffer regardless
+
+    // 2. Search raw input (cin)
+    char ch = 0;
+    while (cin >> ch) {
+        if (ch == c) return;
+    }
+}
+
+// --- New Cleanup Function ---
+void clean_up_mess() {
+    ts.ignore(print); // 'print' is our symbolic constant for ';'
+}
+
+// --- Updated Calculate Loop ---
+void calculate() {
+    while (cin) {
+        try {
+            cout << prompt;
+            Token t = ts.get();
+            while (t.kind == print) t = ts.get();
+            if (t.kind == quit) return;
+            ts.putback(t);
+            cout << result << expression() << endl;
+        }
+        catch (exception& e) {
+            cerr << e.what() << endl; // Display the error (e.g., "Bad token")
+            clean_up_mess();          // Skip the rest of the bad line
+        }
+    }
+}
